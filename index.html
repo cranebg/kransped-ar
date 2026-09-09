@@ -570,6 +570,11 @@ async function startAR(){
   hideMsg();
   arNote.textContent = 'Насочи камерата към пода и тапни "Постави тук", когато жълтият пръстен е върху точното място.';
 
+  // critical: an opaque scene background/fog paints over the camera feed, causing a black screen in AR
+  scene.background = null;
+  scene.fog = null;
+  renderer.setClearColor(0x000000, 0);
+
   reticle = buildReticle();
   scene.add(reticle);
 
@@ -616,6 +621,9 @@ function onXRSessionEnd(){
   document.body.classList.remove('ar-active','ar-can-place');
   if(reticle){ scene.remove(reticle); reticle=null; }
   hitTestSource = null; refSpace = null;
+  scene.background = new THREE.Color(0x14181D);
+  scene.fog = new THREE.Fog(0x14181D, 40, 90);
+  renderer.setClearColor(0x000000, 1);
   grid.visible = true;
   craneRig.visible = true;
   craneRig.position.set(0,0,0);
