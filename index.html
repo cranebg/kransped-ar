@@ -527,7 +527,7 @@ function buildGLBBlob(sceneRoot){
   const posBlocks=[], normBlocks=[], idxBlocks=[];
   const primMeta=[];
   const materials=[]; const materialCache=new Map();
-  let vertexOffset=0;
+
 
   function materialIndex(mat){
     if(materialCache.has(mat.uuid)) return materialCache.get(mat.uuid);
@@ -578,13 +578,11 @@ function buildGLBBlob(sceneRoot){
 
     const icount = idxAttr.count;
     const idx = new Uint32Array(icount);
-    for(let i=0;i<icount;i++) idx[i]=idxAttr.getX(i)+vertexOffset;
+    for(let i=0;i<icount;i++) idx[i]=idxAttr.getX(i);
 
     posBlocks.push(pos); normBlocks.push(nor); idxBlocks.push(idx);
     primMeta.push({vcount, icount, min:[minX,minY,minZ], max:[maxX,maxY,maxZ],
-      matIdx: materialIndex(Array.isArray(mesh.material)?mesh.material[0]:mesh.material)});
-    vertexOffset += vcount;
-  });
+      matIdx: materialIndex(Array.isArray(mesh.material)?mesh.material[0]:mesh.material)});  });
 
   function pad4(n){ return (4-(n%4))%4; }
   const chunks=[]; let byteOffset=0;
