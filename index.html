@@ -349,6 +349,7 @@ const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
 renderer.setSize(wrap.clientWidth, wrap.clientHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
 renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local');
 wrap.appendChild(renderer.domElement);
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 1.1));
