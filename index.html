@@ -81,10 +81,20 @@
   }
   body.ar-active .ar-exit-btn{display:inline-flex;align-items:center;gap:8px;}
   .ar-msg{color:#F2B705;font-size:12px;font-family:'IBM Plex Mono',monospace;}
+
+  #debugLog{
+    position:fixed;top:0;left:0;right:0;z-index:2000;
+    max-height:38vh;overflow-y:auto;
+    background:rgba(0,0,0,0.75);color:#6CFF8A;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.4;
+    padding:6px 8px;pointer-events:none;
+  }
+  #debugLog div.err{color:#FF6C6C;}
 </style>
 </head>
 <body>
 <div id="canvas-wrap"></div>
+<div id="debugLog"></div>
 <div class="badge">PROXY PREVIEW — опростена геометрия за проверка на пропорции и логика на изчисление. Не е финалният 3D модел (виж заданието за 3D моделиста).</div>
 <div class="hint">Влачи = завърти изгледа<br>Скрол = zoom</div>
 
@@ -524,6 +534,18 @@ const arExitBtn = document.getElementById('arExitBtn');
 const arNote = document.getElementById('arNote');
 const arMsg = document.getElementById('arMsg');
 const panelEl = document.querySelector('.panel');
+const debugLogEl = document.getElementById('debugLog');
+
+function dlog(msg, isErr){
+  const d = document.createElement('div');
+  if(isErr) d.className='err';
+  d.textContent = (new Date()).toLocaleTimeString()+' — '+msg;
+  debugLogEl.appendChild(d);
+  debugLogEl.scrollTop = debugLogEl.scrollHeight;
+}
+window.addEventListener('error', e=>dlog('window error: '+e.message, true));
+window.addEventListener('unhandledrejection', e=>dlog('unhandled rejection: '+(e.reason && e.reason.message || e.reason), true));
+dlog('Страницата зареди. navigator.xr = '+(!!navigator.xr));
 
 let xrSession = null;
 let hitTestSource = null;
@@ -545,9 +567,11 @@ function buildReticle(){
 }
 
 async function startAR(){
-  if(!navigator.xr){ showMsg('WebXR не се поддържа в този браузър. Използвай Chrome на Android.'); return; }
+  dlog('AR бутон натиснат.');
+  if(!navigator.xr){ showMsg('WebXR не се поддържа в този браузър. Използвай Chrome на Android.'); dlog('navigator.xr липсва.', true); return; }
   let supported = false;
-  try{ supported = await navigator.xr.isSessionSupported('immersive-ar'); }catch(e){}
+  try{ supported = await navigator.xr.isSessionSupported('immersive-ar'); }catch(e){ dlog('isSessionSupported хвърли грешка: '+e.message, true); }
+  dlog('immersive-ar supported = '+supported);
   if(!supported){ showMsg('Това устройство/браузър не поддържа immersive AR.'); return; }
 
   try{
@@ -556,7 +580,9 @@ async function startAR(){
       optionalFeatures: ['dom-overlay'],
       domOverlay: { root: panelEl }
     });
+    dlog('requestSession успешен.');
   }catch(err){
+    dlog('requestSession грешка: '+err.message, true);
     showMsg('Не успях да стартирам AR сесия: '+err.message);
     return;
   }
@@ -578,10 +604,20 @@ async function startAR(){
   reticle = buildReticle();
   scene.add(reticle);
 
-  await renderer.xr.setSession(xrSession);
-  refSpace = await xrSession.requestReferenceSpace('local');
-  const viewerSpace = await xrSession.requestReferenceSpace('viewer');
-  hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+  try{
+    await renderer.xr.setSession(xrSession);
+    dlog('renderer.xr.setSession OK. isPresenting='+renderer.xr.isPresenting);
+  }catch(err){
+    dlog('renderer.xr.setSession грешка: '+err.message, true);
+  }
+  try{
+    refSpace = await xrSession.requestReferenceSpace('local');
+    const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+    hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+    dlog('hit-test source готов.');
+  }catch(err){
+    dlog('hit-test setup грешка: '+err.message, true);
+  }
 
   xrSession.addEventListener('end', onXRSessionEnd);
 
@@ -599,12 +635,17 @@ async function startAR(){
   arExitBtn.onclick = ()=>{ xrSession.end(); };
 }
 
+let loggedFirstFrame = false;
+let frameCounter = 0;
 function onXRFrame(frame){
+  if(!loggedFirstFrame){ dlog('Първи XR frame получен.'); loggedFirstFrame = true; }
   if(!hitTestSource || !refSpace || placed) {
     if(reticle) reticle.visible = false;
     return;
   }
   const hitResults = frame.getHitTestResults(hitTestSource);
+  frameCounter++;
+  if(frameCounter % 60 === 0) dlog('hit-test резултати: '+hitResults.length);
   if(hitResults.length > 0){
     const pose = hitResults[0].getPose(refSpace);
     reticle.visible = true;
