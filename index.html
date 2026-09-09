@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ATF 65G-4 — Параметричен преглед (proxy)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script type="module" src="https://cdnjs.cloudflare.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"></script>
 <style>
   :root{
     --ink:#14181D; --blueprint:#17324A; --steel:#5C6B73;
@@ -66,26 +65,22 @@
   .ar-btn:hover{background:#ff6a35;}
   .ar-note{color:#8FA5B3;font-size:11px;font-family:'IBM Plex Mono',monospace;max-width:520px;}
 
-  .ar-overlay{
-    position:fixed;inset:0;z-index:1000;
-    background:#0B0E12;
-    display:flex;flex-direction:column;
+  body.ar-active .badge, body.ar-active .hint{display:none;}
+  body.ar-active .panel{background:rgba(20,24,29,0.82);}
+  .ar-place-btn{
+    display:none;
+    background:var(--yellow);color:#14181D;border:none;border-radius:4px;
+    padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;
   }
-  .ar-overlay-top{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:12px 16px;background:rgba(20,24,29,0.95);
-    color:#DCE0E2;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.12);
+  body.ar-active.ar-can-place .ar-place-btn{display:inline-flex;align-items:center;gap:8px;}
+  body.ar-active .ar-btn.ar-enter-only{display:none;}
+  .ar-exit-btn{
+    display:none;
+    background:transparent;border:1px solid rgba(255,255,255,0.3);color:#DCE0E2;
+    border-radius:4px;padding:10px 14px;font-size:13px;cursor:pointer;
   }
-  .ar-close{
-    background:transparent;border:1px solid rgba(255,255,255,0.25);color:#DCE0E2;
-    border-radius:4px;width:30px;height:30px;font-size:14px;cursor:pointer;
-  }
-  .ar-status{
-    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-    color:#F2B705;font-family:'IBM Plex Mono',monospace;font-size:13px;
-    text-align:center;z-index:2;
-  }
-  #mv{--progress-bar-color:#E85A2B;--poster-color:transparent;flex:1;}
+  body.ar-active .ar-exit-btn{display:inline-flex;align-items:center;gap:8px;}
+  .ar-msg{color:#F2B705;font-size:12px;font-family:'IBM Plex Mono',monospace;}
 </style>
 </head>
 <body>
@@ -146,18 +141,12 @@
     <div><span class="k">Конфигурация</span><span class="v" id="rConfig" style="font-size:12px;">–</span></div>
   </div>
   <div class="ar-row">
-    <button class="ar-btn" id="arBtn">📲 Постави в AR (Android + Chrome)</button>
-    <span class="ar-note">Генерира текущата конфигурация като 3D модел в реален мащаб (метри) и отваря камерата на телефона за поставяне върху реалния обект. Proxy геометрия — не е финалният 3D модел на крана.</span>
+    <button class="ar-btn ar-enter-only" id="arBtn">📲 Постави в AR (Android + Chrome)</button>
+    <button class="ar-place-btn" id="arPlaceBtn">🎯 Постави тук</button>
+    <button class="ar-exit-btn" id="arExitBtn">✕ Изход от AR</button>
+    <span class="ar-note" id="arNote">Тапни бутона, после насочи камерата към пода/земята и тапни екрана, за да поставиш центъра на крана в реалния мащаб. Менютата остават активни докато си в AR.</span>
+    <span class="ar-msg" id="arMsg" style="display:none;"></span>
   </div>
-</div>
-
-<div class="ar-overlay" id="arOverlay" style="display:none;">
-  <div class="ar-overlay-top">
-    <span>AR преглед — ATF 65G-4 (proxy) · <span id="arConfigLabel"></span></span>
-    <button class="ar-close" id="arClose">✕</button>
-  </div>
-  <div class="ar-status" id="arStatus">Подготвяне на 3D модела…</div>
-  <model-viewer id="mv" ar ar-modes="webxr scene-viewer" ar-placement="floor" ar-scale="fixed" camera-controls shadow-intensity="0.7" exposure="1"></model-viewer>
 </div>
 
 <script>
@@ -346,9 +335,10 @@ function updateCamera(){
 }
 updateCamera();
 
-const renderer = new THREE.WebGLRenderer({antialias:true});
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
 renderer.setSize(wrap.clientWidth, wrap.clientHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.xr.enabled = true;
 wrap.appendChild(renderer.domElement);
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 1.1));
@@ -359,6 +349,9 @@ scene.add(dl);
 const grid = new THREE.GridHelper(60, 60, 0x3C5E77, 0x22303B);
 scene.add(grid);
 
+const craneRig = new THREE.Group();
+scene.add(craneRig);
+
 const matSteel = new THREE.MeshStandardMaterial({color:0x5C6B73, metalness:0.4, roughness:0.6});
 const matOrange = new THREE.MeshStandardMaterial({color:0xE85A2B, metalness:0.3, roughness:0.5});
 const matDark = new THREE.MeshStandardMaterial({color:0x22303B, metalness:0.2, roughness:0.8});
@@ -366,7 +359,7 @@ const matYellow = new THREE.MeshStandardMaterial({color:0xF2B705, metalness:0.2,
 
 // Chassis group (fixed)
 const chassisGroup = new THREE.Group();
-scene.add(chassisGroup);
+craneRig.add(chassisGroup);
 
 const chassisBody = new THREE.Mesh(new THREE.BoxGeometry(2.55,1.1,8.0), matSteel);
 chassisBody.position.set(0,0.85,0);
@@ -431,7 +424,7 @@ extMesh.visible = false;
 boomPivot.add(extMesh);
 
 const hook = new THREE.Mesh(new THREE.SphereGeometry(0.22,12,12), matYellow);
-scene.add(hook);
+craneRig.add(hook);
 const cableMat = new THREE.LineBasicMaterial({color:0xCCCCCC});
 let cableLine = null;
 
@@ -471,27 +464,29 @@ function updateScene(r){
     extMesh.rotation.x = offsetDeg*Math.PI/180;
   }
 
-  // hook position (approx, world space)
+  // hook position (approx, world space -> convert to craneRig-local since hook is now a child of craneRig)
   const boomWorldPos = new THREE.Vector3();
   boomPivot.getWorldPosition(boomWorldPos);
   const angleRad = r.angleDeg*Math.PI/180;
   const dir = new THREE.Vector3(0, Math.sin(angleRad), Math.cos(angleRad));
   dir.applyQuaternion(turretGroup.quaternion);
-  const tip = boomWorldPos.clone().add(dir.multiplyScalar(r.effLength/3.2)); // proxy scale
-  hook.position.copy(tip).setY(Math.max(tip.y-1.5, 0.3));
+  const tipWorld = boomWorldPos.clone().add(dir.multiplyScalar(r.effLength/3.2)); // proxy scale
+  const tipLocal = tipWorld.clone().sub(craneRig.position);
+  hook.position.copy(tipLocal).setY(Math.max(tipLocal.y-1.5, 0.3));
 
-  if(cableLine) scene.remove(cableLine);
-  const geo = new THREE.BufferGeometry().setFromPoints([tip, hook.position]);
+  if(cableLine) craneRig.remove(cableLine);
+  const geo = new THREE.BufferGeometry().setFromPoints([tipLocal, hook.position]);
   cableLine = new THREE.Line(geo, cableMat);
-  scene.add(cableLine);
+  craneRig.add(cableLine);
 }
 
-// pointer drag for orbit
+// pointer drag for orbit (desktop preview only — disabled while an AR session is active)
 let dragging=false, lastX=0, lastY=0;
-renderer.domElement.addEventListener('pointerdown', e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
+let arSessionActive=false;
+renderer.domElement.addEventListener('pointerdown', e=>{ if(arSessionActive) return; dragging=true;lastX=e.clientX;lastY=e.clientY;});
 window.addEventListener('pointerup', ()=>dragging=false);
 window.addEventListener('pointermove', e=>{
-  if(!dragging) return;
+  if(!dragging || arSessionActive) return;
   camAz -= (e.clientX-lastX)*0.006;
   camEl = Math.max(0.08, Math.min(1.3, camEl + (e.clientY-lastY)*0.006));
   lastX=e.clientX; lastY=e.clientY;
@@ -509,179 +504,130 @@ window.addEventListener('resize', ()=>{
 });
 
 function animate(){
-  requestAnimationFrame(animate);
+  renderer.setAnimationLoop(render);
+}
+function render(timestamp, frame){
+  if(frame) onXRFrame(frame);
   renderer.render(scene, camera);
 }
 update();
 animate();
 
-/* ===================== Minimal GLB exporter (proxy geometry -> real-world-scale glTF binary) =====================
-   Bakes current world-space triangles of every visible Mesh in the scene into a single .glb Blob,
-   so <model-viewer ar> can hand it to ARCore (Scene Viewer) / WebXR at true 1:1 meter scale.
-   No external exporter library needed — cdnjs does not host the three.js examples/ addons. */
-function buildGLBBlob(sceneRoot){
-  sceneRoot.updateMatrixWorld(true);
-  const meshes = [];
-  sceneRoot.traverse(o=>{ if(o.isMesh && o.visible) meshes.push(o); });
+/* ===================== Native WebXR AR (hit-test + dom-overlay) =====================
+   Reuses the SAME live three.js scene/camera/renderer already driving the desktop preview.
+   No export/serialization step at all — the crane is the live scene graph, so every slider
+   and select in the panel keeps working exactly as-is while the AR session is active,
+   because the panel <div> itself is used as the WebXR dom-overlay root. */
+const arBtn = document.getElementById('arBtn');
+const arPlaceBtn = document.getElementById('arPlaceBtn');
+const arExitBtn = document.getElementById('arExitBtn');
+const arNote = document.getElementById('arNote');
+const arMsg = document.getElementById('arMsg');
+const panelEl = document.querySelector('.panel');
 
-  const posBlocks=[], normBlocks=[], idxBlocks=[];
-  const primMeta=[];
-  const materials=[]; const materialCache=new Map();
+let xrSession = null;
+let hitTestSource = null;
+let refSpace = null;
+let reticle = null;
+let placed = false;
 
+function showMsg(text){ arMsg.style.display='block'; arMsg.textContent = text; }
+function hideMsg(){ arMsg.style.display='none'; }
 
-  function materialIndex(mat){
-    if(materialCache.has(mat.uuid)) return materialCache.get(mat.uuid);
-    const c = mat.color || new THREE.Color(0xC0C0C0);
-    const idx = materials.length;
-    materials.push({
-      pbrMetallicRoughness:{
-        baseColorFactor:[c.r,c.g,c.b,1.0],
-        metallicFactor: (mat.metalness!==undefined)?mat.metalness:0.2,
-        roughnessFactor: (mat.roughness!==undefined)?mat.roughness:0.7
-      }
-    });
-    materialCache.set(mat.uuid, idx);
-    return idx;
-  }
-
-  const nMat = new THREE.Matrix3();
-  const v = new THREE.Vector3(), n = new THREE.Vector3();
-
-  meshes.forEach(mesh=>{
-    let geom = mesh.geometry;
-    if(!geom.index){
-      const cnt = geom.attributes.position.count;
-      const seq = new Uint32Array(cnt);
-      for(let i=0;i<cnt;i++) seq[i]=i;
-      geom = geom.clone();
-      geom.setIndex(new THREE.BufferAttribute(seq,1));
-    }
-    const posAttr = geom.attributes.position;
-    const normAttr = geom.attributes.normal;
-    const idxAttr = geom.index;
-
-    nMat.getNormalMatrix(mesh.matrixWorld);
-
-    const vcount = posAttr.count;
-    const pos = new Float32Array(vcount*3);
-    const nor = new Float32Array(vcount*3);
-    let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
-    for(let i=0;i<vcount;i++){
-      v.fromBufferAttribute(posAttr,i).applyMatrix4(mesh.matrixWorld);
-      pos[i*3]=v.x; pos[i*3+1]=v.y; pos[i*3+2]=v.z;
-      if(v.x<minX)minX=v.x; if(v.y<minY)minY=v.y; if(v.z<minZ)minZ=v.z;
-      if(v.x>maxX)maxX=v.x; if(v.y>maxY)maxY=v.y; if(v.z>maxZ)maxZ=v.z;
-      if(normAttr){ n.fromBufferAttribute(normAttr,i).applyMatrix3(nMat).normalize(); }
-      else { n.set(0,1,0); }
-      nor[i*3]=n.x; nor[i*3+1]=n.y; nor[i*3+2]=n.z;
-    }
-
-    const icount = idxAttr.count;
-    const idx = new Uint32Array(icount);
-    for(let i=0;i<icount;i++) idx[i]=idxAttr.getX(i);
-
-    posBlocks.push(pos); normBlocks.push(nor); idxBlocks.push(idx);
-    primMeta.push({vcount, icount, min:[minX,minY,minZ], max:[maxX,maxY,maxZ],
-      matIdx: materialIndex(Array.isArray(mesh.material)?mesh.material[0]:mesh.material)});  });
-
-  function pad4(n){ return (4-(n%4))%4; }
-  const chunks=[]; let byteOffset=0;
-  function addChunk(typedArray){
-    const bytes = new Uint8Array(typedArray.buffer, typedArray.byteOffset, typedArray.byteLength);
-    const start = byteOffset;
-    chunks.push(bytes); byteOffset += bytes.byteLength;
-    const p = pad4(byteOffset);
-    if(p>0){ chunks.push(new Uint8Array(p)); byteOffset += p; }
-    return start;
-  }
-
-  const bufferViews=[], accessors=[];
-  const meshDef = { primitives: [] };
-  primMeta.forEach((p,i)=>{
-    const posOff = addChunk(posBlocks[i]);
-    bufferViews.push({buffer:0, byteOffset:posOff, byteLength:posBlocks[i].byteLength, target:34962});
-    accessors.push({bufferView:bufferViews.length-1, componentType:5126, count:p.vcount, type:'VEC3', min:p.min, max:p.max});
-    const posAcc = accessors.length-1;
-
-    const normOff = addChunk(normBlocks[i]);
-    bufferViews.push({buffer:0, byteOffset:normOff, byteLength:normBlocks[i].byteLength, target:34962});
-    accessors.push({bufferView:bufferViews.length-1, componentType:5126, count:p.vcount, type:'VEC3'});
-    const normAcc = accessors.length-1;
-
-    const idxOff = addChunk(idxBlocks[i]);
-    bufferViews.push({buffer:0, byteOffset:idxOff, byteLength:idxBlocks[i].byteLength, target:34963});
-    accessors.push({bufferView:bufferViews.length-1, componentType:5125, count:p.icount, type:'SCALAR'});
-    const idxAcc = accessors.length-1;
-
-    meshDef.primitives.push({attributes:{POSITION:posAcc, NORMAL:normAcc}, indices:idxAcc, material:p.matIdx, mode:4});
-  });
-
-  const binBuffer = new Uint8Array(byteOffset);
-  let cursor=0;
-  chunks.forEach(c=>{ binBuffer.set(c,cursor); cursor+=c.byteLength; });
-
-  const gltf = {
-    asset:{version:"2.0", generator:"KRANSPED-proxy-exporter"},
-    scene:0, scenes:[{nodes:[0]}], nodes:[{mesh:0}],
-    meshes:[meshDef], materials, accessors, bufferViews,
-    buffers:[{byteLength:binBuffer.byteLength}]
-  };
-
-  const enc = new TextEncoder();
-  let jsonStr = JSON.stringify(gltf);
-  let jsonBytes = enc.encode(jsonStr);
-  const jp = pad4(jsonBytes.byteLength);
-  if(jp>0){ jsonStr += ' '.repeat(jp); jsonBytes = enc.encode(jsonStr); }
-
-  const totalLength = 12 + 8 + jsonBytes.byteLength + 8 + binBuffer.byteLength;
-  const out = new ArrayBuffer(totalLength);
-  const dv = new DataView(out);
-  let off=0;
-  dv.setUint32(off, 0x46546C67, true); off+=4;
-  dv.setUint32(off, 2, true); off+=4;
-  dv.setUint32(off, totalLength, true); off+=4;
-  dv.setUint32(off, jsonBytes.byteLength, true); off+=4;
-  dv.setUint32(off, 0x4E4F534A, true); off+=4;
-  new Uint8Array(out, off, jsonBytes.byteLength).set(jsonBytes); off+=jsonBytes.byteLength;
-  dv.setUint32(off, binBuffer.byteLength, true); off+=4;
-  dv.setUint32(off, 0x004E4942, true); off+=4;
-  new Uint8Array(out, off, binBuffer.byteLength).set(binBuffer); off+=binBuffer.byteLength;
-
-  return new Blob([out], {type:'model/gltf-binary'});
+function buildReticle(){
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.18, 0.24, 32).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({color:0xF2B705, side:THREE.DoubleSide})
+  );
+  ring.visible = false;
+  ring.matrixAutoUpdate = false;
+  return ring;
 }
 
-/* ===================== AR button wiring ===================== */
-const arBtn = document.getElementById('arBtn');
-const arOverlay = document.getElementById('arOverlay');
-const arClose = document.getElementById('arClose');
-const arStatus = document.getElementById('arStatus');
-const arConfigLabel = document.getElementById('arConfigLabel');
-const mv = document.getElementById('mv');
-let currentARUrl = null;
+async function startAR(){
+  if(!navigator.xr){ showMsg('WebXR не се поддържа в този браузър. Използвай Chrome на Android.'); return; }
+  let supported = false;
+  try{ supported = await navigator.xr.isSessionSupported('immersive-ar'); }catch(e){}
+  if(!supported){ showMsg('Това устройство/браузър не поддържа immersive AR.'); return; }
 
-arBtn.addEventListener('click', ()=>{
-  arOverlay.style.display = 'flex';
-  arStatus.style.display = 'block';
-  arStatus.textContent = 'Подготвяне на 3D модела…';
-  arConfigLabel.textContent = document.getElementById('rConfig').textContent;
   try{
-    const blob = buildGLBBlob(scene);
-    if(currentARUrl) URL.revokeObjectURL(currentARUrl);
-    currentARUrl = URL.createObjectURL(blob);
-    mv.addEventListener('load', ()=>{ arStatus.style.display='none'; }, {once:true});
-    mv.addEventListener('error', (e)=>{ arStatus.textContent='Грешка при зареждане на модела.'; console.error(e); }, {once:true});
-    mv.src = currentARUrl;
+    xrSession = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test'],
+      optionalFeatures: ['dom-overlay'],
+      domOverlay: { root: panelEl }
+    });
   }catch(err){
-    arStatus.textContent = 'Грешка при генериране: '+err.message;
-    console.error(err);
+    showMsg('Не успях да стартирам AR сесия: '+err.message);
+    return;
   }
-});
 
-arClose.addEventListener('click', ()=>{
-  arOverlay.style.display = 'none';
-  mv.src = '';
-  if(currentARUrl){ URL.revokeObjectURL(currentARUrl); currentARUrl=null; }
-});
+  arSessionActive = true;
+  placed = false;
+  document.body.classList.add('ar-active');
+  document.body.classList.remove('ar-can-place');
+  grid.visible = false;
+  craneRig.visible = false;
+  hideMsg();
+  arNote.textContent = 'Насочи камерата към пода и тапни "Постави тук", когато жълтият пръстен е върху точното място.';
+
+  reticle = buildReticle();
+  scene.add(reticle);
+
+  await renderer.xr.setSession(xrSession);
+  refSpace = await xrSession.requestReferenceSpace('local');
+  const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+  hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+
+  xrSession.addEventListener('end', onXRSessionEnd);
+
+  arPlaceBtn.onclick = ()=>{
+    if(!reticle.visible) return;
+    craneRig.position.setFromMatrixPosition(reticle.matrix);
+    craneRig.visible = true;
+    placed = true;
+    reticle.visible = false;
+    document.body.classList.remove('ar-can-place');
+    arPlaceBtn.textContent = '🎯 Премести';
+    arNote.textContent = 'Кранът е поставен. Менюто отдолу продължава да работи на живо. Натисни "Премести", за да го позиционираш отново.';
+  };
+
+  arExitBtn.onclick = ()=>{ xrSession.end(); };
+}
+
+function onXRFrame(frame){
+  if(!hitTestSource || !refSpace || placed) {
+    if(reticle) reticle.visible = false;
+    return;
+  }
+  const hitResults = frame.getHitTestResults(hitTestSource);
+  if(hitResults.length > 0){
+    const pose = hitResults[0].getPose(refSpace);
+    reticle.visible = true;
+    reticle.matrix.fromArray(pose.transform.matrix);
+    document.body.classList.add('ar-can-place');
+  } else {
+    reticle.visible = false;
+    document.body.classList.remove('ar-can-place');
+  }
+}
+
+function onXRSessionEnd(){
+  arSessionActive = false;
+  document.body.classList.remove('ar-active','ar-can-place');
+  if(reticle){ scene.remove(reticle); reticle=null; }
+  hitTestSource = null; refSpace = null;
+  grid.visible = true;
+  craneRig.visible = true;
+  craneRig.position.set(0,0,0);
+  placed = false;
+  arPlaceBtn.textContent = '🎯 Постави тук';
+  arNote.textContent = 'Тапни бутона, после насочи камерата към пода/земята и тапни екрана, за да поставиш центъра на крана в реалния мащаб. Менютата остават активни докато си в AR.';
+  hideMsg();
+  updateCamera();
+  xrSession = null;
+}
+
+arBtn.addEventListener('click', startAR);
 </script>
 </body>
 </html>
